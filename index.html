@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cortar vídeo em partes (MP4)</title>
+<style>
+  :root {
+    --bg: #f5f5f4;
+    --card: #ffffff;
+    --border: #ddd6ce;
+    --text: #2a2622;
+    --muted: #6b645c;
+    --accent: #7a3b2e;
+    --accent-hover: #612e24;
+    --ok: #2e6b3d;
+    --warn: #8a5a12;
+    --err: #a3312a;
+    --warn-bg: #fff6e6;
+    --err-bg: #fdecea;
+    --ok-bg: #eaf4ec;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 20px; font-size: 0.95rem; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; }
+  .notice {
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+  .notice.info { background: #eef2f6; color: #33475b; border: 1px solid #c9d6e3; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #f0d9a8; }
+  .notice.err  { background: var(--err-bg); color: var(--err); border: 1px solid #f2c2be; }
+  .notice.ok   { background: var(--ok-bg); color: var(--ok); border: 1px solid #bfe0c6; }
+  label { display: block; font-size: 0.88rem; font-weight: 600; margin-bottom: 6px; }
+  input[type="file"] {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: #faf9f7;
+    font-size: 0.9rem;
+  }
+  input[type="number"] {
+    width: 120px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+  }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .field { margin-bottom: 14px; }
+  .hint { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    padding: 10px 18px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: var(--accent-hover); }
+  button:disabled { background: #b6ada3; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  button.secondary:hover:not(:disabled) { background: #f3e9e5; }
+  #infoBox { font-size: 0.9rem; }
+  #infoBox table { border-collapse: collapse; width: 100%; }
+  #infoBox td { padding: 3px 6px 3px 0; vertical-align: top; }
+  #infoBox td.k { color: var(--muted); white-space: nowrap; width: 40%; }
+  .progressOuter {
+    width: 100%;
+    background: #ece7e0;
+    border-radius: 6px;
+    height: 10px;
+    overflow: hidden;
+    margin: 10px 0 6px;
+  }
+  .progressInner {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.2s;
+  }
+  #logBox {
+    background: #1e1c1a;
+    color: #d8d2c8;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    border-radius: 8px;
+    padding: 10px 12px;
+    height: 150px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #resultList { list-style: none; padding: 0; margin: 0; }
+  #resultList li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  #resultList li:last-child { border-bottom: none; }
+  #resultList .fname { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
+  #resultList .fsize { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+  a.dl {
+    background: var(--ok);
+    color: #fff;
+    text-decoration: none;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  a.dl:hover { opacity: 0.9; }
+  footer { color: var(--muted); font-size: 0.78rem; margin-top: 24px; }
+  .hidden { display: none !important; }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #e5ded5;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: -2px;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Cortar vídeo em partes (MP4)</h1>
+  <p class="subtitle">Divide um vídeo MP4 em partes menores, cada uma abrindo e tocando sozinha, com nomes sem acentos ou caracteres especiais.</p>
+
+  <div class="notice info">
+    <strong>Tudo roda no seu navegador.</strong> O vídeo não é enviado para nenhum servidor — o processamento acontece localmente, na memória do computador. Só é baixado da internet o "motor" de vídeo (ffmpeg, ~30&nbsp;MB, uma única vez por sessão). É necessário estar conectado à internet na primeira vez que a página processar um vídeo.
+  </div>
+
+  <div class="card">
+    <h2>1. Selecione o vídeo</h2>
+    <div class="field">
+      <input type="file" id="fileInput" accept="video/mp4,video/*">
+    </div>
+    <div id="infoBox" class="hidden"></div>
+  </div>
+
+  <div class="card" id="configCard" style="display:none;">
+    <h2>2. Configurações</h2>
+    <div class="field">
+      <label for="maxSize">Tamanho máximo por parte (MB)</label>
+      <div class="row">
+        <input type="number" id="maxSize" value="99" min="5" max="4000" step="1">
+        <span class="hint">1 MB = 1.048.576 bytes (padrão usado pelos sistemas operacionais)</span>
+      </div>
+    </div>
+    <div class="field">
+      <label for="baseName">Nome base dos arquivos (sem acentos/símbolos — gerado automaticamente, edite se quiser)</label>
+      <input type="text" id="baseName" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px;">
+    </div>
+    <div id="estimateBox" class="hint" style="margin-bottom:14px;"></div>
+    <button id="processBtn">Processar vídeo</button>
+  </div>
+
+  <div class="card hidden" id="progressCard">
+    <h2 id="progressTitle">Processando…</h2>
+    <div class="progressOuter"><div class="progressInner" id="progressBar"></div></div>
+    <div id="progressText" class="hint"></div>
+    <div id="logBox"></div>
+    <div id="fallbackBox" class="hidden" style="margin-top:14px;"></div>
+  </div>
+
+  <div class="card hidden" id="resultCard">
+    <h2 id="resultTitle">Partes geradas</h2>
+    <div id="resultNotice"></div>
+    <ul id="resultList"></ul>
+    <div class="row" style="margin-top:14px;">
+      <button id="downloadAllBtn" class="secondary">Baixar todas</button>
+      <span class="hint">O navegador pode pedir permissão para baixar vários arquivos de uma vez — permita.</span>
+    </div>
+  </div>
+
+  <footer>
+    Limitações conhecidas: (1) o vídeo inteiro precisa caber na memória do navegador — funciona bem até aproximadamente 1,5–2&nbsp;GB; arquivos maiores podem falhar por falta de memória. (2) O corte só ocorre em quadros-chave do vídeo, então o tamanho de cada parte é uma aproximação — a ferramenta ajusta automaticamente e avisa se não conseguir garantir o limite sem recodificar. (3) Requer navegador atualizado (Chrome, Edge ou Firefox recentes) e internet na primeira execução para carregar o motor de vídeo.
+  </footer>
+
+</div>
+
+<script type="module">
+// Importado dinamicamente apenas quando necessário (ver ensureFfmpegLoaded),
+// para que o resto da página funcione mesmo se o CDN estiver bloqueado/indisponível.
+let FFmpeg, fetchFile;
+
+const fileInput = document.getElementById('fileInput');
+const infoBox = document.getElementById('infoBox');
+const configCard = document.getElementById('configCard');
+const maxSizeInput = document.getElementById('maxSize');
+const baseNameInput = document.getElementById('baseName');
+const estimateBox = document.getElementById('estimateBox');
+const processBtn = document.getElementById('processBtn');
+const progressCard = document.getElementById('progressCard');
+const progressTitle = document.getElementById('progressTitle');
+const progressBar = document.getElementById('progressBar');
+const progressText = document.getElementById('progressText');
+const logBox = document.getElementById('logBox');
+const fallbackBox = document.getElementById('fallbackBox');
+const resultCard = document.getElementById('resultCard');
+const resultTitle = document.getElementById('resultTitle');
+const resultNotice = document.getElementById('resultNotice');
+const resultList = document.getElementById('resultList');
+const downloadAllBtn = document.getElementById('downloadAllBtn');
+
+const MiB = 1024 * 1024;
+
+let currentFile = null;
+let durationSeconds = null;
+let ffmpeg = null;
+let ffmpegLoaded = false;
+let generatedParts = []; // {name, blob, url}
+
+// ---------- sanitização de nome de arquivo ----------
+function sanitizeBaseName(name) {
+  let base = name.replace(/\.[^.]+$/, ''); // remove extensão
+  base = base.normalize('NFD').replace(/[̀-ͯ]/g, ''); // remove acentos
+  base = base.replace(/[^a-zA-Z0-9]+/g, '_'); // troca tudo que não é letra/número por _
+  base = base.replace(/_+/g, '_').replace(/^_+|_+$/g, ''); // colapsa e apara underscores
+  if (!base) base = 'video';
+  return base;
+}
+
+function formatBytes(bytes) {
+  return (bytes / MiB).toFixed(2) + ' MB';
+}
+
+function formatDuration(sec) {
+  sec = Math.round(sec);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString('pt-BR');
+  logBox.textContent += `[${t}] ${msg}\n`;
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setProgress(pct, text) {
+  progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  if (text) progressText.textContent = text;
+}
+
+// ---------- seleção de arquivo ----------
+fileInput.addEventListener('change', async () => {
+  resultCard.classList.add('hidden');
+  progressCard.classList.add('hidden');
+  fallbackBox.classList.add('hidden');
+  fallbackBox.innerHTML = '';
+  logBox.textContent = '';
+
+  const file = fileInput.files[0];
+  if (!file) { configCard.style.display = 'none'; infoBox.classList.add('hidden'); return; }
+  currentFile = file;
+  durationSeconds = null;
+
+  infoBox.classList.remove('hidden');
+  infoBox.innerHTML = '<span class="spinner"></span> Lendo metadados do vídeo…';
+
+  const url = URL.createObjectURL(file);
+  const videoEl = document.createElement('video');
+  videoEl.preload = 'metadata';
+  videoEl.src = url;
+
+  const gotMeta = await new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(false), 8000);
+    videoEl.onloadedmetadata = () => {
+      clearTimeout(timeout);
+      resolve(isFinite(videoEl.duration) && videoEl.duration > 0);
+    };
+    videoEl.onerror = () => { clearTimeout(timeout); resolve(false); };
+  });
+
+  if (gotMeta) {
+    durationSeconds = videoEl.duration;
+  }
+  URL.revokeObjectURL(url);
+
+  if (!durationSeconds) {
+    infoBox.innerHTML = '<span style="color:var(--err)">Não foi possível ler a duração do vídeo diretamente no navegador. Ainda assim é possível tentar processar — a duração será obtida durante o processamento.</span>';
+  } else {
+    infoBox.innerHTML = `<table>
+      <tr><td class="k">Arquivo</td><td>${escapeHtml(file.name)}</td></tr>
+      <tr><td class="k">Tamanho</td><td>${formatBytes(file.size)}</td></tr>
+      <tr><td class="k">Duração</td><td>${formatDuration(durationSeconds)}</td></tr>
+      <tr><td class="k">Resolução</td><td>${videoEl.videoWidth || '?'}×${videoEl.videoHeight || '?'}</td></tr>
+    </table>`;
+  }
+
+  baseNameInput.value = sanitizeBaseName(file.name);
+  configCard.style.display = 'block';
+  updateEstimate();
+});
+
+maxSizeInput.addEventListener('input', updateEstimate);
+
+function updateEstimate() {
+  if (!currentFile) { estimateBox.textContent = ''; return; }
+  const maxMB = parseFloat(maxSizeInput.value) || 99;
+  const hardTargetBytes = maxMB * MiB;
+  const n = Math.max(1, Math.ceil(currentFile.size / (hardTargetBytes * 0.85)));
+  estimateBox.textContent = currentFile.size <= hardTargetBytes
+    ? `O arquivo já está dentro do limite (${formatBytes(currentFile.size)}) — mesmo assim ele será copiado com o novo nome, sem dividir.`
+    : `Estimativa: aproximadamente ${n} parte(s) de até ${maxMB} MB.`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- download com progresso real e detecção de travamento ----------
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function fetchWithProgress(url, label, progressWeight) {
+  const controller = new AbortController();
+  let stallTimer;
+  const STALL_MS = 20000;
+  const resetStall = () => {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => controller.abort(), STALL_MS);
+  };
+
+  resetStall();
+  let resp;
+  try {
+    resp = await fetch(url, { signal: controller.signal });
+  } catch (e) {
+    clearTimeout(stallTimer);
+    if (e.name === 'AbortError') {
+      throw new Error(`Conexão travou ao tentar baixar ${label} (sem resposta por ${STALL_MS/1000}s). Verifique sua internet ou se cdn.jsdelivr.net está bloqueado na sua rede.`);
+    }
+    throw new Error(`Falha ao baixar ${label}: ${e.message}`);
+  }
+  if (!resp.ok) {
+    clearTimeout(stallTimer);
+    throw new Error(`Falha ao baixar ${label} (servidor respondeu ${resp.status}).`);
+  }
+  const total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+  if (!resp.body || !resp.body.getReader) {
+    clearTimeout(stallTimer);
+    log(`Baixando ${label}…`);
+    return await resp.blob();
+  }
+  const reader = resp.body.getReader();
+  const chunks = [];
+  let received = 0;
+  try {
+    while (true) {
+      resetStall();
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (total) {
+        const pct = Math.round((received / total) * 100);
+        setProgress(pct * progressWeight, `Baixando ${label}: ${(received/MiB).toFixed(1)} MB / ${(total/MiB).toFixed(1)} MB (${pct}%)`);
+      } else {
+        setProgress(0, `Baixando ${label}: ${(received/MiB).toFixed(1)} MB…`);
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`Conexão travou ao baixar ${label} (sem dados novos por ${STALL_MS/1000}s). Verifique sua internet ou se cdn.jsdelivr.net está bloqueado na sua rede.`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(stallTimer);
+  }
+  log(`${label} baixado (${(received/MiB).toFixed(1)} MB).`);
+  return new Blob(chunks);
+}
+
+async function fetchBlobURL(url, label, mime, progressWeight) {
+  const blob = await fetchWithProgress(url, label, progressWeight);
+  return URL.createObjectURL(mime ? new Blob([blob], { type: mime }) : blob);
+}
+
+// ---------- carregamento do ffmpeg ----------
+async function ensureFfmpegLoaded() {
+  if (ffmpegLoaded) return;
+  setProgress(0, 'Carregando motor de vídeo (ffmpeg)… isso só acontece na primeira vez (arquivo grande, ~30 MB).');
+  log('Carregando biblioteca ffmpeg.wasm (necessário internet)…');
+
+  if (!FFmpeg) {
+    try {
+      const mod1 = await import("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js");
+      const mod2 = await import("https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js");
+      FFmpeg = mod1.FFmpeg;
+      fetchFile = mod2.fetchFile;
+    } catch (e) {
+      throw new Error('Não foi possível baixar a biblioteca de vídeo pela internet (cdn.jsdelivr.net). Verifique sua conexão — se estiver em uma rede corporativa/institucional, pode haver bloqueio de acesso a esse endereço. Detalhe técnico: ' + e.message);
+    }
+  }
+
+  ffmpeg = new FFmpeg();
+  ffmpeg.on('log', ({ message }) => {
+    // guarda o log completo para diagnóstico, mas só mostra linhas relevantes
+    lastFfmpegLog.push(message);
+    if (/error|Error|invalid|Invalid/.test(message)) log(message);
+  });
+  ffmpeg.on('progress', ({ progress }) => {
+    if (progress >= 0 && progress <= 1) {
+      setProgress(10 + progress * 80, `Processando… ${Math.round(progress * 100)}%`);
+    }
+  });
+
+  const coreBaseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+  const ffmpegBaseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm';
+  try {
+    // O worker.js real importa arquivos irmãos (./const.js, ./errors.js) por caminho relativo.
+    // Se transformássemos o próprio worker.js num blob, essas importações relativas deixam de
+    // fazer sentido (um blob não tem "pasta") e o worker trava silenciosamente ao carregar —
+    // foi exatamente esse o travamento visto antes. A correção é criar um blob minúsculo que
+    // apenas reimporta o worker.js real pela URL absoluta do CDN, preservando as importações
+    // relativas internas dele, enquanto ainda evita o erro de "origem diferente" ao criar o worker.
+    const workerShim = `import ${JSON.stringify(ffmpegBaseURL + '/worker.js')};`;
+    const workerBlobURL = URL.createObjectURL(new Blob([workerShim], { type: 'text/javascript' }));
+
+    // Baixa os arquivos do núcleo manualmente (em vez do utilitário pronto) para mostrar
+    // progresso real na tela e detectar travamento de rede — sem isso, um download lento
+    // ou uma rede que bloqueia o CDN parecem "travados para sempre" sem nenhum aviso.
+    const coreBlobURL = await fetchBlobURL(`${coreBaseURL}/ffmpeg-core.js`, 'ffmpeg-core.js', 'text/javascript', 0.15);
+    const wasmBlobURL = await fetchBlobURL(`${coreBaseURL}/ffmpeg-core.wasm`, 'ffmpeg-core.wasm', 'application/wasm', 0.75);
+
+    log('Arquivos baixados. Iniciando o motor de vídeo…');
+    setProgress(80, 'Iniciando o motor de vídeo…');
+
+    await withTimeout(
+      ffmpeg.load({
+        // classWorkerURL precisa ser um blob local: sem isso, o navegador bloqueia a criação
+        // do worker por segurança (o script ficaria em outra origem), não é problema de internet.
+        classWorkerURL: workerBlobURL,
+        coreURL: coreBlobURL,
+        wasmURL: wasmBlobURL,
+      }),
+      30000,
+      'O motor de vídeo baixou, mas travou ao iniciar (mais de 30s parado nessa etapa, sem depender mais da internet). Isso indica incompatibilidade entre o navegador e a biblioteca — me avise informando o navegador e o sistema operacional que você está usando.'
+    );
+  } catch (e) {
+    throw new Error('Falha ao carregar o motor de vídeo (ffmpeg). ' + e.message);
+  }
+  ffmpegLoaded = true;
+  log('Motor de vídeo carregado.');
+}
+
+let lastFfmpegLog = [];
+
+async function probeDurationViaFfmpeg(inputName) {
+  lastFfmpegLog = [];
+  try {
+    await ffmpeg.exec(['-i', inputName]);
+  } catch (e) { /* esperado: ffmpeg sem -o "falha", mas o log já foi capturado */ }
+  const full = lastFfmpegLog.join('\n');
+  const m = full.match(/Duration:\s*(\d+):(\d+):(\d+)\.(\d+)/);
+  if (!m) return null;
+  return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / 100;
+}
+
+async function listGeneratedFiles(prefix) {
+  const entries = await ffmpeg.listDir('/');
+  return entries
+    .filter(e => !e.isDir && e.name.startsWith(prefix))
+    .map(e => e.name)
+    .sort();
+}
+
+async function runSegmentSplit(inputName, segmentTime, prefix) {
+  const args = ['-i', inputName, '-c', 'copy', '-map', '0',
+    '-f', 'segment', '-segment_time', String(segmentTime),
+    '-reset_timestamps', '1', '-movflags', '+faststart',
+    `${prefix}%04d.mp4`];
+  lastFfmpegLog = [];
+  await ffmpeg.exec(args);
+  const names = await listGeneratedFiles(prefix);
+  const parts = [];
+  for (const name of names) {
+    const data = await ffmpeg.readFile(name);
+    parts.push({ name, size: data.length, data });
+  }
+  return parts;
+}
+
+async function cleanupFiles(names) {
+  for (const n of names) {
+    try { await ffmpeg.deleteFile(n); } catch (e) { /* ignore */ }
+  }
+}
+
+// ---------- fluxo principal ----------
+processBtn.addEventListener('click', async () => {
+  processBtn.disabled = true;
+  resultCard.classList.add('hidden');
+  fallbackBox.classList.add('hidden');
+  fallbackBox.innerHTML = '';
+  progressCard.classList.remove('hidden');
+  progressTitle.textContent = 'Processando…';
+  logBox.textContent = '';
+  setProgress(0, 'Iniciando…');
+
+  const maxMB = parseFloat(maxSizeInput.value) || 99;
+  const hardTargetBytes = maxMB * MiB;
+  const baseName = sanitizeBaseName(baseNameInput.value || currentFile.name);
+  // Identificador único desta execução: evita que arquivos de um processamento anterior
+  // (ainda não removidos da memória interna do ffmpeg) se misturem com os novos se o
+  // usuário clicar em "Processar" mais de uma vez na mesma sessão da página.
+  const runId = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '_';
+
+  try {
+    // caso o arquivo já esteja dentro do limite: só renomeia, sem precisar do ffmpeg
+    if (currentFile.size <= hardTargetBytes) {
+      setProgress(95, 'Arquivo já está dentro do limite — copiando com novo nome…');
+      const data = new Uint8Array(await currentFile.arrayBuffer());
+      finishWithParts([{ name: `${baseName}.mp4`, size: data.length, data }], maxMB, false);
+      processBtn.disabled = false;
+      return;
+    }
+
+    await ensureFfmpegLoaded();
+
+    const inputName = runId + 'input' + guessExt(currentFile.name);
+    setProgress(5, 'Carregando vídeo na memória do navegador…');
+    log('Lendo arquivo de entrada…');
+    await ffmpeg.writeFile(inputName, await fetchFile(currentFile));
+
+    let duration = durationSeconds;
+    if (!duration) {
+      setProgress(8, 'Analisando vídeo…');
+      duration = await probeDurationViaFfmpeg(inputName);
+      if (!duration) throw new Error('Não foi possível determinar a duração do vídeo. O arquivo pode estar corrompido ou em formato não suportado.');
+    }
+
+    const bitrateBps = (currentFile.size * 8) / duration;
+    let safety = 0.85;
+    let attempt = 0;
+    let prevMaxActual = Infinity;
+    let finalParts = null;
+    let lastAttemptParts = null;
+    let lastAttemptPrefix = null;
+
+    while (attempt < 5) {
+      attempt++;
+      const targetPartBytes = hardTargetBytes * safety;
+      let segTime = (targetPartBytes * 8) / bitrateBps;
+      segTime = Math.max(1, Math.min(segTime, duration));
+
+      setProgress(10, `Tentativa ${attempt}: gerando partes de ~${(segTime).toFixed(1)}s…`);
+      log(`Tentativa ${attempt}: tempo de corte estimado ${segTime.toFixed(2)}s (margem de segurança ${(safety*100).toFixed(0)}%)`);
+
+      const prefix = `${runId}attempt${attempt}_`;
+      const parts = await runSegmentSplit(inputName, segTime, prefix);
+
+      if (lastAttemptParts) await cleanupFiles(lastAttemptParts.map(p => p.name));
+      lastAttemptParts = parts;
+      lastAttemptPrefix = prefix;
+
+      const maxActual = Math.max(...parts.map(p => p.size));
+      log(`Tentativa ${attempt}: ${parts.length} parte(s), maior = ${formatBytes(maxActual)}`);
+
+      if (maxActual <= hardTargetBytes) {
+        finalParts = parts;
+        break;
+      }
+
+      if (maxActual >= prevMaxActual * 0.98) {
+        log('Sem melhora relevante entre tentativas — os quadros-chave do vídeo estão muito espaçados para cortar exatamente nesse limite sem recodificar.');
+        break;
+      }
+      prevMaxActual = maxActual;
+      safety = Math.max(0.05, safety * (hardTargetBytes / maxActual) * 0.92);
+    }
+
+    if (finalParts) {
+      await ffmpeg.deleteFile(inputName);
+      await cleanupFiles(finalParts.map(p => p.name));
+      finishWithParts(
+        finalParts.map((p, i) => ({ name: `${baseName}_parte${i + 1}.mp4`, size: p.size, data: p.data })),
+        maxMB, false
+      );
+    } else {
+      // não conseguiu respeitar o limite só com corte sem recodificar
+      setProgress(100, '');
+      progressTitle.textContent = 'Não foi possível garantir o limite sem recodificar';
+      resultCard.classList.remove('hidden');
+      resultTitle.textContent = 'Aviso';
+      resultNotice.innerHTML = `<div class="notice warn">
+        Este vídeo tem quadros-chave muito espaçados (comum em algumas gravações de tela ou de sistemas de captura específicos).
+        Sem recodificar o vídeo, a menor parte possível ainda ficou acima de ${maxMB} MB
+        (maior parte obtida: ${formatBytes(Math.max(...lastAttemptParts.map(p => p.size)))}).
+        <br><br>
+        Você pode baixar essas partes mesmo assim (${lastAttemptParts.length} arquivo(s), sem perda de qualidade) ou recodificar o vídeo
+        para forçar quadros-chave mais frequentes e respeitar o limite com exatidão — isso é mais lento e altera minimamente a qualidade do vídeo.
+      </div>`;
+      resultList.innerHTML = '';
+      renderPartsList(lastAttemptParts.map((p, i) => ({ name: `${baseName}_parte${i + 1}.mp4`, size: p.size, data: p.data })));
+      await cleanupFiles(lastAttemptParts.map(p => p.name)); // bytes já estão em memória JS; limpa a cópia no ffmpeg
+
+      fallbackBox.classList.remove('hidden');
+      fallbackBox.innerHTML = '';
+      const recodeBtn = document.createElement('button');
+      recodeBtn.textContent = 'Recodificar e cortar com exatidão (mais lento)';
+      fallbackBox.appendChild(recodeBtn);
+      recodeBtn.addEventListener('click', async () => {
+        recodeBtn.disabled = true;
+        await cleanupFiles(lastAttemptParts.map(p => p.name));
+        try {
+          await runRecodeFallback(inputName, hardTargetBytes, baseName, maxMB, duration, runId);
+        } catch (e) {
+          log('Erro na recodificação: ' + e.message);
+          resultNotice.innerHTML += `<div class="notice err">Falha ao recodificar: ${escapeHtml(e.message)}</div>`;
+        }
+        await ffmpeg.deleteFile(inputName);
+        processBtn.disabled = false;
+      });
+    }
+  } catch (e) {
+    setProgress(100, '');
+    progressTitle.textContent = 'Erro no processamento';
+    log('ERRO: ' + e.message);
+    resultCard.classList.remove('hidden');
+    resultTitle.textContent = 'Erro';
+    resultNotice.innerHTML = `<div class="notice err">${escapeHtml(e.message)}</div>`;
+    resultList.innerHTML = '';
+    processBtn.disabled = false;
+    return;
+  }
+
+  processBtn.disabled = false;
+});
+
+async function runRecodeFallback(inputName, hardTargetBytes, baseName, maxMB, duration, runId) {
+  progressTitle.textContent = 'Recodificando vídeo (pode levar alguns minutos)…';
+  setProgress(10, 'Recodificando com quadros-chave curtos…');
+  log('Recodificando vídeo com quadros-chave a cada ~2s para permitir corte exato…');
+
+  const recodedName = runId + 'recoded.mp4';
+  await ffmpeg.exec([
+    '-i', inputName,
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+    '-g', '48', '-keyint_min', '48', '-sc_threshold', '0',
+    '-c:a', 'aac', '-b:a', '128k',
+    '-movflags', '+faststart',
+    recodedName
+  ]);
+  log('Recodificação concluída. Cortando novamente…');
+
+  const bitrateBps = (await ffmpeg.readFile(recodedName)).length * 8 / duration;
+  let safety = 0.9;
+  let finalParts = null;
+  let lastParts = null;
+  let prevMax = Infinity;
+
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const targetPartBytes = hardTargetBytes * safety;
+    let segTime = Math.max(1, Math.min((targetPartBytes * 8) / bitrateBps, duration));
+    const prefix = `${runId}rattempt${attempt}_`;
+    setProgress(20 + attempt * 15, `Cortando (tentativa ${attempt})…`);
+    const parts = await runSegmentSplit(recodedName, segTime, prefix);
+    if (lastParts) await cleanupFiles(lastParts.map(p => p.name));
+    lastParts = parts;
+    const maxActual = Math.max(...parts.map(p => p.size));
+    log(`Tentativa ${attempt} (recodificado): maior parte = ${formatBytes(maxActual)}`);
+    if (maxActual <= hardTargetBytes) { finalParts = parts; break; }
+    if (maxActual >= prevMax * 0.98) break;
+    prevMax = maxActual;
+    safety = Math.max(0.05, safety * (hardTargetBytes / maxActual) * 0.92);
+  }
+
+  await ffmpeg.deleteFile(recodedName);
+
+  if (finalParts) {
+    await cleanupFiles(finalParts.map(p => p.name));
+    resultNotice.innerHTML = `<div class="notice ok">Recodificado com sucesso — todas as partes respeitam o limite de ${maxMB} MB. Observação: o vídeo foi recodificado, então não é mais uma cópia bit a bit do original.</div>`;
+    finishWithParts(finalParts.map((p, i) => ({ name: `${baseName}_parte${i + 1}.mp4`, size: p.size, data: p.data })), maxMB, true);
+  } else {
+    resultNotice.innerHTML = `<div class="notice err">Mesmo recodificado, não foi possível respeitar o limite de ${maxMB} MB. Tente reduzir o valor de "tamanho máximo por parte" e processar novamente.</div>`;
+    renderPartsList(lastParts.map((p, i) => ({ name: `${baseName}_parte${i + 1}.mp4`, size: p.size, data: p.data })));
+    await cleanupFiles(lastParts.map(p => p.name));
+  }
+}
+
+function guessExt(name) {
+  const m = name.match(/\.[a-zA-Z0-9]+$/);
+  return m ? m[0] : '.mp4';
+}
+
+function finishWithParts(parts, maxMB, wasRecoded) {
+  progressCard.classList.add('hidden');
+  resultCard.classList.remove('hidden');
+  resultTitle.textContent = `Partes geradas (${parts.length})`;
+  const allOk = parts.every(p => p.size <= maxMB * MiB);
+  resultNotice.innerHTML = allOk
+    ? `<div class="notice ok">Concluído. Todas as partes estão dentro do limite de ${maxMB} MB.${wasRecoded ? ' O vídeo foi recodificado para garantir o corte exato.' : ' Corte feito sem recodificar (mesma qualidade do original).'}</div>`
+    : `<div class="notice warn">Concluído, mas verifique os tamanhos abaixo — pode haver parte acima do limite.</div>`;
+  renderPartsList(parts);
+}
+
+function renderPartsList(parts) {
+  generatedParts.forEach(p => URL.revokeObjectURL(p.url));
+  generatedParts = [];
+  resultList.innerHTML = '';
+  parts.forEach(p => {
+    const blob = new Blob([p.data], { type: 'video/mp4' });
+    const url = URL.createObjectURL(blob);
+    generatedParts.push({ name: p.name, blob, url });
+
+    const li = document.createElement('li');
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'fname';
+    nameSpan.textContent = p.name;
+    const sizeSpan = document.createElement('span');
+    sizeSpan.className = 'fsize';
+    sizeSpan.textContent = formatBytes(p.size);
+    const a = document.createElement('a');
+    a.className = 'dl';
+    a.href = url;
+    a.download = p.name;
+    a.textContent = 'Baixar';
+
+    const right = document.createElement('div');
+    right.style.display = 'flex';
+    right.style.alignItems = 'center';
+    right.style.gap = '10px';
+    right.appendChild(sizeSpan);
+    right.appendChild(a);
+
+    li.appendChild(nameSpan);
+    li.appendChild(right);
+    resultList.appendChild(li);
+  });
+}
+
+downloadAllBtn.addEventListener('click', async () => {
+  for (let i = 0; i < generatedParts.length; i++) {
+    const p = generatedParts[i];
+    const a = document.createElement('a');
+    a.href = p.url;
+    a.download = p.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    await new Promise(r => setTimeout(r, 500));
+  }
+});
+</script>
+</body>
+</html>
